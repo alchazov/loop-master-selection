@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}
+spec:
+  internalTrafficPolicy: Cluster
+  ports:
+  - name: loop-app
+    port: 8065
+    protocol: TCP
+    targetPort: 8065
+  selector:
+    loop-master: ""
+  sessionAffinity: None
+  type: ClusterIP

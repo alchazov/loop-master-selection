@@ -1,0 +1,9 @@
+label_endpoint:
+  app.kubernetes.io/name: loop-enterprise-edition
+
+ingress:
+  host: loop.example.com
+  class: nginx
+  tls:
+    secretName: ingress-le-tls
+

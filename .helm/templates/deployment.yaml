@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    app: {{ .Chart.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        image: flant/shell-operator:v1.0.6
+        env:
+        - name: KUBERNETES_DEPLOYED
+          value: "{{ now }}"
+        volumeMounts:
+        - name: hooks-volume
+          mountPath: /hooks/
+      serviceAccountName: {{ .Chart.Name }}
+      volumes:
+      - name: hooks-volume
+        configMap:
+          name: {{ .Chart.Name }}
+          defaultMode: 0777
