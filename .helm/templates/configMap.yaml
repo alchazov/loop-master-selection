@@ -51,21 +51,46 @@ data:
 
       ns={{ .Release.Namespace }}
       maxIp="0"
+      podName=""
 
-      # find all IP from endpoint
-      for ip in $(jq -r '.[].objects[].object.subsets[].addresses[].ip' $BINDING_CONTEXT_PATH)
-      do
-        a=$(atoi $ip)
-        b=$(atoi $maxIp)
+      type=$(jq -r '.[0].type' $BINDING_CONTEXT_PATH)
 
-        # compare IPs, remember max IP
-        if [[ $a > $b ]]; then
-          maxIp=$ip
-        fi
-      done
+      if [[ $type == "Synchronization" ]] ; then
+        # find all IP from endpoint
+        for ip in $(jq -r '.[].objects[].object.subsets[].addresses[].ip' $BINDING_CONTEXT_PATH)
+        do
+          a=$(atoi $ip)
+          b=$(atoi $maxIp)
 
-      # get podName by IP
-      podName=$(jq -r '.[].objects[].object.subsets[].addresses[]|select(.ip == "'$maxIp'")|.targetRef.name' $BINDING_CONTEXT_PATH)
+          # compare IPs, remember max IP
+          if [[ $a > $b ]]; then
+            maxIp=$ip
+          fi
+        done
+
+        # get podName by IP
+        podName=$(jq -r '.[].objects[].object.subsets[].addresses[]|select(.ip == "'$maxIp'")|.targetRef.name' $BINDING_CONTEXT_PATH)
+
+      fi
+
+      if [[ $type == "Event" ]] ; then
+        # find all IP from endpoint
+        for ip in $(jq -r '.[].object.subsets[].addresses[].ip' $BINDING_CONTEXT_PATH)
+        do
+          a=$(atoi $ip)
+          b=$(atoi $maxIp)
+
+          # compare IPs, remember max IP
+          if [[ $a > $b ]]; then
+            maxIp=$ip
+          fi
+        done
+
+        # get podName by IP
+        podName=$(jq -r '.[].object.subsets[].addresses[]|select(.ip == "'$maxIp'")|.targetRef.name' $BINDING_CONTEXT_PATH)
+
+      fi
+
 
       echo "Found pod with max ip: $podName, $maxIp"
 
