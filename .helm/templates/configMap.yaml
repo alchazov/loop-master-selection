@@ -21,7 +21,7 @@ data:
           "labelSelector": {
             "matchLabels": {
             {{- range $i, $val := .Values.label_endpoint }}
-              {{ $i | quote }}: {{ $val | quote }}
+              {{ $i | quote }}: {{ $val | quote }},
             {{- end }}
             }
           },
