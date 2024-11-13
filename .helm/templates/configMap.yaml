@@ -86,7 +86,7 @@ data:
         # get podName by IP
         podName=$(jq -r "$jq_selector | select(.ip == \"$maxIp\") | .targetRef.name" $BINDING_CONTEXT_PATH)
         if [ -z "${podName}" ]; then
-          echo "ERR: could not find any pod by selected ip=$maxIp"; exit 1
+          echo "ERR: could not find any pod by selected ip=$maxIp";
         fi
         for pod in $(kubectl -n $ns get po -l loop-master="true" -o json | jq -r '.items[] | .metadata.name')
         do
@@ -103,6 +103,12 @@ data:
         kubectl -n $ns label pod $podName loop-master="true" --overwrite
       else
         echo "WARN: no one pod was not found"
+      fi
+
+      check_cnt=$(kubectl -n $ns get po -l loop-master="true" -o json | jq '.items | length')
+
+      if [ $check_cnt -le 0 ]; then
+        echo "FATAL: cant find master pod"; exit 1
       fi
 
       sleep 5
