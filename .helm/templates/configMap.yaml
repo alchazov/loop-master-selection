@@ -54,8 +54,7 @@ data:
       }
 
       ns={{ .Release.Namespace }}
-      find=false
-      newElection=false
+      found=false
       maxIp="0"
       podName=""
       jq_selector=""
@@ -78,36 +77,26 @@ data:
         # compare IPs, remember max IP
         if [[ $a > $b ]]; then
           maxIp=$ip
-          find=true
+          found=true
         fi
       done
 
-      if $find; then
+      if $found; then
         # get podName by IP
         podName=$(jq -r "$jq_selector | select(.ip == \"$maxIp\") | .targetRef.name" $BINDING_CONTEXT_PATH)
-      fi
-
-
-      for pod in $(kubectl -n $ns get po -l loop-master="true" -o json | jq -r '.items[] | .metadata.name')
-      do
-        if [ "$pod" != "$podName" ]; then
-          echo "Unlabel $pod for master"
-          kubectl -n $ns label pod $pod loop-master-
-          newElection=true
+        if [ -z "${podName}" ]; then
+          echo "ERR: could not find any pod by selected ip=$maxIp"; exit 1
         fi
-      done
-
-      if $newElection; then
-        echo "NEW: new election for pod: $podName"
-      fi
-
-      if $find; then
-        echo "Found pod with max ip: $podName, $maxIp"
-
-        # echo "Label $podName for master"
+        echo "Elected master is $podName, label it."
         kubectl -n $ns label pod $podName loop-master="true" --overwrite
+        for pod in $(kubectl -n $ns get po -l loop-master="true" -o json | jq -r '.items[] | .metadata.name')
+        do
+          if [ "$pod" != "$podName" ]; then
+            echo "Unlabel old master $pod"
+            kubectl -n $ns label pod $pod loop-master-
+          fi
+        done          
       else
-        echo "WARN: nothing found"
-      fi
-
+        echo "WARN: no one pod was not found" 
+      fi        
     fi
