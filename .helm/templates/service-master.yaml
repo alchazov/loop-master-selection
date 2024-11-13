@@ -10,6 +10,6 @@ spec:
     protocol: TCP
     targetPort: 8065
   selector:
-    loop-master: ""
+    loop-master: "true"
   sessionAffinity: None
   type: ClusterIP
