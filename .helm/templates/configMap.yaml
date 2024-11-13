@@ -91,7 +91,7 @@ data:
       do
         if [ "$pod" != "$podName" ]; then
           echo "Unlabel $pod for master"
-          kubectl -n $ns label pod $podName loop-master-
+          kubectl -n $ns label pod $pod loop-master-
         fi
       done
 
