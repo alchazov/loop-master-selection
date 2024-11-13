@@ -57,6 +57,7 @@ data:
       found=false
       maxIp="0"
       podName=""
+      noOldMasters=true
       jq_selector=""
 
       type=$(jq -r '.[0].type' $BINDING_CONTEXT_PATH)
@@ -87,15 +88,19 @@ data:
         if [ -z "${podName}" ]; then
           echo "ERR: could not find any pod by selected ip=$maxIp"; exit 1
         fi
-        echo "Elected master is $podName, label it."
-        kubectl -n $ns label pod $podName loop-master="true" --overwrite
         for pod in $(kubectl -n $ns get po -l loop-master="true" -o json | jq -r '.items[] | .metadata.name')
         do
+          noOldMasters=false
           if [ "$pod" != "$podName" ]; then
             echo "Unlabel old master $pod"
             kubectl -n $ns label pod $pod loop-master-
           fi
-        done          
+        done
+        if $noOldMasters; then
+          echo "WARN: Old masters was not found"
+        fi
+        echo "Elected master is $podName, label it."
+        kubectl -n $ns label pod $podName loop-master="true" --overwrite        
       else
         echo "WARN: no one pod was not found" 
       fi        
