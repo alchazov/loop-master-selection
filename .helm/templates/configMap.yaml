@@ -38,6 +38,10 @@ data:
     EOF
     else
 
+      ### for debug
+      # set -x
+      # cat $BINDING_CONTEXT_PATH >> /tmp/log-$(date +%s).txt
+
       function atoi
       {
         #Returns the integer representation of an IP arg, passed in ascii dotted-decimal notation (x.x.x.x)
@@ -50,49 +54,38 @@ data:
       }
 
       ns={{ .Release.Namespace }}
+      find=false
       maxIp="0"
       podName=""
+      jq_selector=""
 
       type=$(jq -r '.[0].type' $BINDING_CONTEXT_PATH)
 
       if [[ $type == "Synchronization" ]] ; then
-        # find all IP from endpoint
-        for ip in $(jq -r '.[].objects[].object.subsets[].addresses[].ip' $BINDING_CONTEXT_PATH)
-        do
-          a=$(atoi $ip)
-          b=$(atoi $maxIp)
-
-          # compare IPs, remember max IP
-          if [[ $a > $b ]]; then
-            maxIp=$ip
-          fi
-        done
-
-        # get podName by IP
-        podName=$(jq -r '.[].objects[].object.subsets[].addresses[]|select(.ip == "'$maxIp'")|.targetRef.name' $BINDING_CONTEXT_PATH)
-
-      fi
-
-      if [[ $type == "Event" ]] ; then
-        # find all IP from endpoint
-        for ip in $(jq -r '.[].object.subsets[].addresses[].ip' $BINDING_CONTEXT_PATH)
-        do
-          a=$(atoi $ip)
-          b=$(atoi $maxIp)
-
-          # compare IPs, remember max IP
-          if [[ $a > $b ]]; then
-            maxIp=$ip
-          fi
-        done
-
-        # get podName by IP
-        podName=$(jq -r '.[].object.subsets[].addresses[]|select(.ip == "'$maxIp'")|.targetRef.name' $BINDING_CONTEXT_PATH)
-
+        jq_selector=".[] | select(.objects != null) | .objects[].object | select(.subsets != null) | .subsets[] | select(.addresses != null) |.addresses[]"
+      elif [[ $type == "Event" ]] ; then
+        jq_selector=".[].object | select(.subsets != null) | .subsets[] | select(.addresses != null) |.addresses[]"
       fi
 
 
-      echo "Found pod with max ip: $podName, $maxIp"
+      # find all IP from endpoint
+      for ip in $(jq -r "$jq_selector | .ip" $BINDING_CONTEXT_PATH)
+      do
+        a=$(atoi $ip)
+        b=$(atoi $maxIp)
+
+        # compare IPs, remember max IP
+        if [[ $a > $b ]]; then
+          maxIp=$ip
+          find=true
+        fi
+      done
+
+      if $find; then
+        # get podName by IP
+        podName=$(jq -r "$jq_selector | select(.ip == \"$maxIp\") | .targetRef.name" $BINDING_CONTEXT_PATH)
+      fi
+
 
       for pod in $(kubectl -n $ns get po -l loop-master -o json | jq -r '.items[] | .metadata.name')
       do
@@ -102,7 +95,13 @@ data:
         fi
       done
 
-      echo "Label $podName for master"
-      kubectl -n $ns label pod $podName --overwrite loop-master=""
+      if $find; then
+        echo "Found pod with max ip: $podName, $maxIp"
+
+        # echo "Label $podName for master"
+        kubectl -n $ns label pod $podName --overwrite loop-master=""
+      else
+        echo "WARN: nothing found"
+      fi
 
     fi
