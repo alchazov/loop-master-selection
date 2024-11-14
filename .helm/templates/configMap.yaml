@@ -57,7 +57,6 @@ data:
       found=false
       maxIp="0"
       podName=""
-      noOldMasters=true
       newElection=false
       jq_selector=""
 
@@ -97,17 +96,12 @@ data:
 
         for pod in $(kubectl -n $ns get po -l loop-master="true" -o json | jq -r '.items[] | .metadata.name')
         do
-          noOldMasters=false
           if [ "$pod" != "$podName" ]; then
             echo "INFO: Unlabel old master $pod"
             kubectl -n $ns label pod $pod loop-master-
             newElection=true
           fi
         done
-
-        if $noOldMasters; then
-          echo "WARN: Old masters was not found"
-        fi
 
         if $newElection; then
           echo "INFO: Elected NEW master is $podName, label it."
