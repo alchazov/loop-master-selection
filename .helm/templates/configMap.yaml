@@ -63,7 +63,7 @@ data:
 
       length=$(jq -r '. | length' $BINDING_CONTEXT_PATH)
       cnt=$(( length - 1 ))
-      echo "length: $cnt"
+      echo "length: $length"
 
       type=$(jq -r '.['$cnt'].type' $BINDING_CONTEXT_PATH)
       if [[ $type == "Event" ]] ; then
