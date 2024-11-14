@@ -121,3 +121,104 @@ data:
       fi
 
     fi
+
+  cron_election.sh: |
+    #!/usr/bin/env bash
+
+    if [[ $1 == "--config" ]] ; then
+      cat <<EOF
+    {
+      "configVersion":"v1",
+      "schedule": [
+        {
+          "name": "every 1 min",
+          "crontab": "*/1 * * * *"
+        }
+      ]
+    }
+    EOF
+    else
+
+      ## set for debug
+      # set -x
+
+      ns={{ .Release.Namespace }}
+      check_cnt=$(kubectl -n $ns get po -l loop-master="true" -o json | jq '.items | length')
+      found=false
+      check=false
+      newElection=false
+
+      function atoi
+      {
+        #Returns the integer representation of an IP arg, passed in ascii dotted-decimal notation (x.x.x.x)
+        IP=$1; IPNUM=0
+        for (( i=0 ; i<4 ; ++i )); do
+          ((IPNUM+=${IP%%.*}*$((256**$((3-${i}))))))
+          IP=${IP#*.}
+        done
+        echo $IPNUM
+      }
+
+      if [ $check_cnt -le 0 ]; then
+        echo "WARN: cron no master found, start election"
+        maxIp="0"
+
+      elif [ $check_cnt -eq 1 ]; then
+        echo "INFO: cron master already selected, check"
+
+        masterPodName=$(kubectl -n $ns get po -l loop-master="true" -o json | jq -r ".items[0] | .metadata.name")
+        if [ -z "${masterPodName}" ]; then
+          echo "ERROR: cron masterPodName not found"
+        fi
+
+        masterPodIp=$(kubectl -n loop-stage get ep {{ .Chart.Name }} -o json | jq -r "select(.subsets != null) | .subsets[]| select(.addresses != null) | .addresses[] | select(.targetRef.name==\"$masterPodName\") |.ip")
+        if [ -z "${masterPodIp}" ]; then
+          echo "ERROR: cron masterPodIp not found"
+        fi
+        maxIp=$masterPodIp
+
+      elif [ $check_cnt -gt 1 ]; then
+        echo "WARN: cron more one master found, start check"
+        check=true
+        maxIp="0"
+
+      fi
+
+      for ip in $(kubectl -n $ns get ep -l {{ include "sring.lables" . }} -o json | jq -r ".items[] | select(.subsets != null) | .subsets[] | select(.addresses != null)| .addresses[] | .ip")
+      do
+        a=$(atoi $ip)
+        b=$(atoi $maxIp)
+
+        # compare IPs, remember max IP
+        if [[ $a > $b ]]; then
+          maxIp=$ip
+          found=true
+        fi
+      done
+
+      if $found || $check; then
+        echo "INFO: cron new master election"
+        podName=$(kubectl -n $ns get ep -l {{ include "sring.lables" . }} -o json | jq -r ".items[] | select(.subsets != null) | .subsets[] | select(.addresses != null)| .addresses[] | select(.ip == \"$maxIp\") | .targetRef.name")
+
+        for pod in $(kubectl -n $ns get po -l loop-master="true" -o json | jq -r '.items[] | .metadata.name')
+        do
+          if [ "$pod" != "$podName" ]; then
+            echo "INFO: cron Unlabel old master $pod"
+            kubectl -n $ns label pod $pod loop-master-
+            newElection=true
+          fi
+        done
+
+        if $newElection; then
+          echo "INFO: cron Elected NEW master is $podName, label it."
+        else
+          echo "INFO: cron Elected master is $podName, label it."
+        fi
+
+        kubectl -n $ns label pod $podName loop-master="true" --overwrite
+      else
+        echo "INFO: cron current master pod: $masterPodName, no new election"
+      fi
+
+
+    fi
