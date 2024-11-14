@@ -58,16 +58,25 @@ data:
       maxIp="0"
       podName=""
       noOldMasters=true
+      newElection=false
       jq_selector=""
 
-      type=$(jq -r '.[0].type' $BINDING_CONTEXT_PATH)
+      length=$(jq -r '. | length' $BINDING_CONTEXT_PATH)
+      cnt=$(( length - 1 ))
+      echo "length: $cnt"
 
-      if [[ $type == "Synchronization" ]] ; then
-        jq_selector=".[] | select(.objects != null) | .objects[].object | select(.subsets != null) | .subsets[] | select(.addresses != null) |.addresses[]"
-      elif [[ $type == "Event" ]] ; then
-        jq_selector=".[].object | select(.subsets != null) | .subsets[] | select(.addresses != null) |.addresses[]"
+      type=$(jq -r '.['$cnt'].type' $BINDING_CONTEXT_PATH)
+      if [[ $type == "Event" ]] ; then
+        watchEvent=$(jq -r '.['$cnt'].watchEvent' $BINDING_CONTEXT_PATH)
       fi
 
+      echo "INFO: New action type: $type, watchEvent: $watchEvent"
+
+      if [[ $type == "Synchronization" ]] ; then
+        jq_selector=".[$cnt] | select(.objects != null) | .objects[].object | select(.subsets != null) | .subsets[] | select(.addresses != null) |.addresses[]"
+      elif [[ $type == "Event" ]] ; then
+        jq_selector=".[$cnt].object | select(.subsets != null) | .subsets[] | select(.addresses != null) |.addresses[]"
+      fi
 
       # find all IP from endpoint
       for ip in $(jq -r "$jq_selector | .ip" $BINDING_CONTEXT_PATH)
@@ -85,21 +94,27 @@ data:
       if $found; then
         # get podName by IP
         podName=$(jq -r "$jq_selector | select(.ip == \"$maxIp\") | .targetRef.name" $BINDING_CONTEXT_PATH)
-        if [ -z "${podName}" ]; then
-          echo "ERR: could not find any pod by selected ip=$maxIp";
-        fi
+
         for pod in $(kubectl -n $ns get po -l loop-master="true" -o json | jq -r '.items[] | .metadata.name')
         do
           noOldMasters=false
           if [ "$pod" != "$podName" ]; then
-            echo "Unlabel old master $pod"
+            echo "INFO: Unlabel old master $pod"
             kubectl -n $ns label pod $pod loop-master-
+            newElection=true
           fi
         done
+
         if $noOldMasters; then
           echo "WARN: Old masters was not found"
         fi
-        echo "Elected master is $podName, label it."
+
+        if $newElection; then
+          echo "INFO: Elected NEW master is $podName, label it."
+        else
+          echo "INFO: Elected master is $podName, label it."
+        fi
+
         kubectl -n $ns label pod $podName loop-master="true" --overwrite
       else
         echo "WARN: no one pod was not found"
@@ -108,8 +123,7 @@ data:
       check_cnt=$(kubectl -n $ns get po -l loop-master="true" -o json | jq '.items | length')
 
       if [ $check_cnt -le 0 ]; then
-        echo "FATAL: cant find master pod"; exit 1
+        echo "FATAL: cant find master pod";
       fi
 
-      sleep 5
     fi
